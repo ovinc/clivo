@@ -24,6 +24,13 @@ The properties that the CLI has to monitor modify need do be defined as subclass
 - `on_stop()`: define what happens when a stop request comes from the CLI
 - `value`: a settable attribute (property): that indicates how to set and get the value associated with the property type of interest
 
+The command line interface must also be subclassed from the `CommandLineInterface` class, which must define the following (static)method:
+- `init_ppties()`: define how to to manage the received properties; must return a dict of dicts with keys:
+    - property identifiers (ptype) as defined above, e.g. 'dt'
+    - names (names of sensors/devices etc. managed by the CLI)
+
+    and with the individual property objects defined above as values.
+
 
 Misc. info
 ==========
