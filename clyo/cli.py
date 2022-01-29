@@ -48,6 +48,34 @@ class Property(ABC):
         pass
 
 
+class TimeInterval(Property):
+    """Example of use of a Property subclass.
+
+    Also convenient because timers are used in many applications
+    """
+
+    ptype = 'dt'
+    name = 'Δt (s)'
+
+    def __init__(self, timer):
+        """timer is a timer object from the oclock module."""
+        self.timer = timer
+
+    def convert_input(self, cmd):
+        return float(cmd)
+
+    def on_stop(self):
+        self.timer.stop()
+
+    @property
+    def value(self):
+        return self.timer.interval
+
+    @value.setter
+    def value(self, val):
+        self.timer.interval = val
+
+
 # ================================ MAIN CLASS ================================
 
 
