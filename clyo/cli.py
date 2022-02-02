@@ -1,220 +1,231 @@
-"""Interactive command line interface."""
+"""Interactive command line interface (CLI)."""
 
 
-from abc import ABC, abstractmethod
+from threading import Event
 
 
 # TODO -- use match statement with python >= 3.10 instead of if/else
 
 
-class Property(ABC):
-    """Abstract base class identifying which attributes/methods properties have.
-    """
-
-    @abstractmethod
-    def convert_input(self, cmd):
-        """how to convert command line input to useful property value"""
-        pass
-
-    @abstractmethod
-    def on_stop(self):
-        """define what happens when a stop request comes from the CLI"""
-        pass
-
-    # Below, these attributes can be implemented as class attributes ---------
-
-    @property
-    @abstractmethod
-    def ptype(self):
-        """identifier of property of interest (e.g. 'dt' for time interval)"""
-        pass
-
-    @property
-    @abstractmethod
-    def name(self):
-        """corresponding human-readable name for printing"""
-        pass
-
-    # Settable value property ------------------------------------------------
-
-    @property
-    @abstractmethod
-    def value(self):
-        pass
-
-    @value.setter
-    @abstractmethod
-    def value(self, val):
-        pass
-
-
-class TimeInterval(Property):
-    """Example of use of a Property subclass.
-
-    Also convenient because timers are used in many applications
-    """
-
-    ptype = 'dt'
-    name = 'Δt (s)'
-
-    def __init__(self, timer):
-        """timer is a timer object from the oclock module."""
-        self.timer = timer
-
-    def convert_input(self, cmd):
-        return float(cmd)
-
-    def on_stop(self):
-        self.timer.stop()
-
-    @property
-    def value(self):
-        return self.timer.interval
-
-    @value.setter
-    def value(self, val):
-        self.timer.interval = val
-
-
 # ================================ MAIN CLASS ================================
 
 
-class CommandLineInterface(ABC):
-    """Interactive Command Line class to manage time interval in recordings etc.
+class CommandLineInterface:
+    """Interactive CLI to manage properties of objects and trigger events
 
-    For use in threaded environements with recording of several sensors.
-    In this help, we call an arbitrary sensor X, e.g. X=P for pressure).
+    All objects controlled are referred to with a name.
+    Below, we call an arbitrary name X, e.g. X=P for a pressure reading object).
 
-    The CLI can control an arbitrary of settings (properties) for every sensor
-    recording, e.g. time interval.
-    In this help, we call can arbitrary property y, e.g. y=dt for time interval.
+    The CLI can control an arbitrary number of properties for every object
+    (for example time interval, averaging number, etc.). These properties
+    have commands associated with them.
+    Below, we call can arbitrary property command y, e.g. y=dt for time interval.
+
+    It is also possible to trigger events (e.g. request a graph) with some
+    pre-defined commands passed as a dict to the CLI class.
+    Below, we call these commands for event z
 
     Once the CLI is started (self.run()), the user input options are:
-    - q or Q: (exit)
-    - g or graph: (pop up live graph of data)
     - y: inquire current settings (e.g. dt)
-    - y val: change settings of all recordings to a value val (e.g. dt 10)
-    - dtX val: change settings of only sensor X to value val (e.g. dtP 5)
+    - y val: change property value of all objects to a value val (e.g. dt 10)
+    - dt-X val: change settings of only object X to value val (e.g. dt-P 5)
+    - z: trigger event (stop event is by default 'Q', 'q' or 'quit', can be changed)
     """
 
-    def __init__(self, properties, e_graph, e_stop):
+    def __init__(self, objects, properties, events):
         """Create interactive command line interface.
 
         Parameters
         ----------
-        - properties: object or objects that the ppties defined in the
-          config above are supposed to act upon. define in init_ppties above
-          what these objects should be and how to process them.
+        - objects: dict of {name: object} of objects to control
+                   (name is a str used in the CLI to refer to the object)
+                   objects can define a on_stop() method which indicates
+                   specific things to do when the stop event is set.
 
-        - e_graph: threading event requesting a live graph of the data.
+        - properties: dict of dict describing the properties of the objects
+                      that the CLI controls.
+                      - The keys are the names of the properties
+                        (can be sub-properties, e.g. a property of an attribute)
+                      - The values are dicts which must contain the entries
+                          - 'repr' (human-readable description for printing)
+                          - 'commands': iterable of command names (str) that
+                                        will trigger modification of the
+                                        property when typed in the CLI
 
-        - e_stop: threading event signaling recording to stop
+                      Example:
+                      {'timer.interval': {'repr': 'Δt (s)',
+                                          'commands': ('dt',),
+                                          },
+                       'averaging': {'repr': 'Averaging',
+                                     'commands': ('avg',),
+                                     }
+                       }
+
+        - events: dict of dict describing the events that the CLI controls.
+                  The keys are a description (human-readable) of the event,
+                  and the values are dicts which must contain the entries:
+                  - 'event': Event object to control (typically, from threading)
+                  - 'commands': iterable of command names (str) that
+                                will trigger modification of the
+                                property when typed in the CLI
+
+                  Example:
+                  {'graph': {'event': graph_event,
+                             'commands': ('g', 'graph')
+                             },
+                   'stop': {'event': stop_event,
+                            'commands': ('q', 'quit')
+                            }
+                   }
+
+                   Note: the 'stop' event, if provided, gets linked to the
+                   event that triggers exiting of the CLI. If not provided,
+                   the 'stop' event is defined internally
         """
-        self.ppties = self.init_ppties(properties)  # dict of dicts, keys ppty
+        self.objects = objects
+        self.properties = properties
+        self.events = events
 
-        self.e_stop = e_stop
-        self.e_graph = e_graph
+        try:
+            self.stop_dict = self.events.pop('stop')
+        except KeyError:
+            print('Stop event not passed. Creating one internally.')
+            self.stop_event = Event()
+            self.stop_commands = 'q', 'Q', 'quit'
+        else:
+            self.stop_event = self.stop_dict['event']
+            self.stop_commands = self.stop_dict['commands']
 
-    @staticmethod
-    @abstractmethod
-    def init_ppties(properties):
-        """Define how to to manage the received properties
+        # Note: stop_commands is a tuple, event/property_commmands are dicts.
+        self.event_commands = self._get_commands(self.events)
+        self.property_commands = self._get_commands(self.properties)
 
-        Must return a dict of dicts with keys:
-          - property identifiers (ptype) as defined above, e.g. 'dt'
-          - names (names of sensors/devices etc. managed by the CLI)
-        and with the individual property objects defined above as values.
+        # For CLI printing
+        self.max_name_length = max([len(obj) for obj in self.objects])
+
+    def _get_commands(self, input_data):
+        """Create dict of which command input modifies which property/event.
+
+        Parameters
+        ----------
+        input_data: dict of dict (can be properties dict or event dict)
 
         Example
         -------
-        # objects needed as parameters to instantiate the classes above
-        timers, avgnums = properties
-        names = timers.keys()  # both timers and avgnums should have the same keys
-
-        # instanciate the classes above and put them in a dictionary with sensor
-        # names as keys
-        time_intervals = {name: TimeInterval(timers[name]) for name in names}
-        avg_numbers = {name: AveragingNumber(timers[name], avgnums[name]) for name in names}
-
-        return {'dt': time_intervals, 'avg': avg_numbers}
+        input_data = {'graph': {'event': e_graph,
+                                'commands': ('g', 'graph')},
+                      'stop': {'event': e_stop,
+                               'commands': ('q', 'Q', 'quit')}
+                      }
+        will return {'g': 'graph',
+                     'graph': 'graph',
+                     'q': 'stop',
+                     'Q': 'stop',
+                     'quit': 'stop'}
         """
-        pass
+        commands = {}
+        for name, data_dict in input_data.items():
+            for command_name in data_dict['commands']:
+                commands[command_name] = name
+        return commands
 
-    def set_property(self, ptype, name, command):
-        """manage command from CLI to set a property accordingly."""
+    def _set_property(self, ppty_cmd, object_name, value):
+        """Manage command from CLI to set a property accordingly."""
+        obj = self.objects[object_name]
+        ppty = self.property_commands[ppty_cmd]
+        ppty_repr = self.properties[ppty]['repr']
         try:
-            ppty = self.ppties[ptype][name]
-        except KeyError:
-            msg = f'Unknown property type ({ptype}) or data name ({name})'
-            raise ValueError(msg)
-
-        try:
-            ppty.value = ppty.convert_input(command)
+            exec(f'obj.{ppty} = {value}')  # avoids having to pass a convert function
         except Exception:
-            print(f"'{command}' not a valid {ppty.name}")
+            print(f"'{value}' not a valid {ppty_repr} ({ppty})")
         else:
-            print(f'New {ppty.name} for {name}: {ppty.value}')
+            print(f'New {ppty_repr} for {object_name}: {value}')
 
-    def print_properties(self, ptype):
-        """Prints current values of properties (dt / avg)"""
-        msgs = []
-        for name, ppty in self.ppties[ptype].items():
-            msg = f' {ppty.name} [{name}] = {ppty.value}'
+    def _get_property(self, ppty_cmd, object_name):
+        """Get property according to given property command from CLI."""
+        obj = self.objects[object_name]
+        ppty = self.property_commands[ppty_cmd]
+
+        # exec() strategy avoids having to pass a convert function
+        self._value = None  # exec won't work with local references
+        exec(f'self._value = obj.{ppty}')
+        return self._value
+
+    def _print_properties(self, ppty_cmd):
+        """Prints current values of properties of all objects"""
+        ppty = self.property_commands[ppty_cmd]
+        ppty_repr = self.properties[ppty]['repr']
+
+        msgs = [ppty_repr]
+
+        for object_name in self.objects:
+            value = self._get_property(ppty_cmd, object_name)
+            object_name_str = object_name.ljust(self.max_name_length + 3, '-')
+            msg = f'{object_name_str}{value}'
             msgs.append(msg)
-        print(', '.join(msgs))
+
+        print('\n'.join(msgs))
 
     # ------------------------------------------------------------------------
     # ========================= MAIN INTERACTIVE CLI =========================
     # ------------------------------------------------------------------------
 
     def run(self):
-        """Command Line Interface for interactive control during recording."""
+        """Start the CLI (blocking)."""
 
-        while not self.e_stop.is_set():
+        while not self.stop_event.is_set():
 
-            command = input("Type command (Q to stop recording) : ")
+            quit_commands_str = ' or '.join(self.stop_commands)
+            command = input(f'Type command (to stop, type {quit_commands_str}): ')
 
-            # Stop all recordings ('Q' or 'q') -------------------------------
+            # Stop all recordings --------------------------------------------
 
-            if command == 'q' or command == 'Q':
+            if command in self.stop_commands:
                 print('Stopping recording ...')
-                for ppties in self.ppties.values():
-                    for ppty in ppties.values():
-                        ppty.on_stop()
-                self.e_stop.set()
+                for obj in self.objects.values():
+                    try:
+                        obj.on_stop()
+                    except AttributeError:
+                        pass
+                self.stop_event.set()
 
-            # Request a live graph of the data -------------------------------
+            # Trigger events -------------------------------------------------
 
-            elif command == 'graph' or command == 'g':
-                self.e_graph.set()
+            elif command in self.event_commands:
+                event_name = self.event_commands[command]
+                print(f'{event_name.capitalize()} event requested')
+                event = self.events[event_name]['event']
+                event.set()
 
-            # Change the time intervals or avg of data recording -------------
+            # Change properties of objects -----------------------------------
 
             else:
 
-                for ptype, ppties in self.ppties.items():  # ptype is 'dt' or 'avg'
+                for ppty_cmd in self.property_commands:
 
-                    nlett = len(ptype)
+                    nlett = len(ppty_cmd)
 
                     # e.g. 'dt' --> inquire about current settings ...........
-                    if command == ptype:
-                        self.print_properties(ptype)
+                    if command == ppty_cmd:
+                        self._print_properties(ppty_cmd)
                         break
 
                     # e.g. 'dt 10' --> change setting for all types at once ..
-                    elif command[:nlett + 1] == ptype + ' ':
-                        for name in ppties:  # name is e.g. 'P', 'T', etc.
-                            self.set_property(ptype, name, command[nlett + 1:])
+                    elif command[:nlett + 1] == ppty_cmd + ' ':
+                        value = command[nlett + 1:]
+                        for object_name in self.objects:
+                            self._set_property(ppty_cmd, object_name, value)
                         break
 
-                    # e.g. 'dtP 10' --> change setting only for pressure .....
+                    # e.g. 'dt-P 10' --> change setting only for pressure ....
                     else:
                         found = False
-                        for name in ppties:
-                            specific_cmd = ptype + name  # e.g. 'dtP'
+                        for object_name in self.objects:
+                            specific_cmd = f'{ppty_cmd}-{object_name}'  # e.g. 'dt-P'
                             nspec = len(specific_cmd)
                             if command[:nspec] == specific_cmd:
-                                self.set_property(ptype, name, command[nspec + 1:])
+                                value = command[nspec + 1:]
+                                self._set_property(ppty_cmd, object_name, value)
                                 found = True
                                 break
                         if found:
