@@ -103,7 +103,8 @@ class CommandLineInterface:
         # For CLI printing
         self.max_name_length = max([len(obj) for obj in self.objects])
 
-    def _get_commands(self, input_data):
+    @staticmethod
+    def _get_commands(input_data):
         """Create dict of which command input modifies which property/event.
 
         Parameters
