@@ -148,9 +148,12 @@ class CommandLineInterface:
                 commands[command_name] = name
         return commands
 
-    def _set_property(self, ppty_cmd, object_name, value):
-        """Manage command from CLI to set a property accordingly."""
-        obj = self.objects[object_name]
+    def _set_property_base(self, ppty_cmd, object_name, value, objects):
+        """Base method for _set_property().
+
+        For use in other modules that potentially define other objects.
+        """
+        obj = objects[object_name]
         ppty = self.property_commands[ppty_cmd]
 
         if object_name not in self.object_properties[ppty]:
@@ -163,6 +166,10 @@ class CommandLineInterface:
             print(f"'{value}' not a valid {ppty_repr} ({ppty})")
         else:
             print(f'New {ppty_repr} for {object_name}: {value}')
+
+    def _set_property(self, ppty_cmd, object_name, value):
+        """Manage command from CLI to set a property accordingly."""
+        return self._set_property_base(ppty_cmd, object_name, value, self.objects)
 
     def _get_property(self, ppty_cmd, object_name):
         """Get property according to given property command from CLI."""
