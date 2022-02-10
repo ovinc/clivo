@@ -4,7 +4,7 @@
 from threading import Event
 
 
-# TODO -- use match statement with python >= 3.10 instead of if/else
+# TODO -- use match statement with python >= 3.10 instead of if/else?
 
 
 # ================================ MAIN CLASS ================================
@@ -41,6 +41,11 @@ class CommandLineInterface:
                    (name is a str used in the CLI to refer to the object)
                    objects can define a on_stop() method which indicates
                    specific things to do when the stop event is set.
+                   objects must define a `controlled_properties` attribute
+                   that lists which ones of its settable properties is
+                   controlled by the CLI. `controlled_properties` is an iterable
+                   of str that must belong to the keys of the `properties`
+                   dict (see below).
 
         - properties: dict of dict describing the properties of the objects
                       that the CLI controls.
@@ -100,8 +105,21 @@ class CommandLineInterface:
         self.event_commands = self._get_commands(self.events)
         self.property_commands = self._get_commands(self.properties)
 
+        # Dict {ppty: [object names that have this ppty controlled]}
+        self.object_properties = self._get_controlled_properties()
+
         # For CLI printing
         self.max_name_length = max([len(obj) for obj in self.objects])
+
+    def _get_controlled_properties(self):
+        """Generate dict {ppty: [object names that have this ppty controlled]}."""
+        object_properties = {}
+        for ppty in self.properties:
+            object_properties[ppty] = []
+            for object_name, obj in self.objects.items():
+                if ppty in obj.controlled_properties:
+                    object_properties[ppty].append(object_name)
+        return object_properties
 
     @staticmethod
     def _get_commands(input_data):
@@ -134,6 +152,10 @@ class CommandLineInterface:
         """Manage command from CLI to set a property accordingly."""
         obj = self.objects[object_name]
         ppty = self.property_commands[ppty_cmd]
+
+        if object_name not in self.object_properties[ppty]:
+            return
+
         ppty_repr = self.properties[ppty]['repr']
         try:
             exec(f'obj.{ppty} = {value}')  # avoids having to pass a convert function
@@ -146,6 +168,9 @@ class CommandLineInterface:
         """Get property according to given property command from CLI."""
         obj = self.objects[object_name]
         ppty = self.property_commands[ppty_cmd]
+
+        if object_name not in self.object_properties[ppty]:
+            return
 
         # exec() strategy avoids having to pass a convert function
         self._value = None  # exec won't work with local references
@@ -160,7 +185,12 @@ class CommandLineInterface:
         msgs = [ppty_repr]
 
         for object_name in self.objects:
-            value = self._get_property(ppty_cmd, object_name)
+
+            if object_name in self.object_properties[ppty]:
+                value = self._get_property(ppty_cmd, object_name)
+            else:
+                value = 'N/A'
+
             object_name_str = object_name.ljust(self.max_name_length + 3, '-')
             msg = f'{object_name_str}{value}'
             msgs.append(msg)
@@ -182,13 +212,13 @@ class CommandLineInterface:
             # Stop all recordings --------------------------------------------
 
             if command in self.stop_commands:
-                print('Stopping recording ...')
                 for obj in self.objects.values():
                     try:
                         obj.on_stop()
                     except AttributeError:
                         pass
                 self.stop_event.set()
+                print('CLI stopped')
 
             # Trigger events -------------------------------------------------
 
