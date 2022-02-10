@@ -106,17 +106,17 @@ class CommandLineInterface:
         self.property_commands = self._get_commands(self.properties)
 
         # Dict {ppty: [object names that have this ppty controlled]}
-        self.object_properties = self._get_controlled_properties()
+        self.object_properties = self._get_controlled_properties(objects)
 
         # For CLI printing
         self.max_name_length = max([len(obj) for obj in self.objects])
 
-    def _get_controlled_properties(self):
+    def _get_controlled_properties(self, objects):
         """Generate dict {ppty: [object names that have this ppty controlled]}."""
         object_properties = {}
         for ppty in self.properties:
             object_properties[ppty] = []
-            for object_name, obj in self.objects.items():
+            for object_name, obj in objects.items():
                 if ppty in obj.controlled_properties:
                     object_properties[ppty].append(object_name)
         return object_properties
