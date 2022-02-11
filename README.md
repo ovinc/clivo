@@ -12,7 +12,7 @@ cd clyo
 pip install -e .
 ```
 
-Install must be done from a git repository, because version information is extracted automatically from the git commits when saving metadata.
+Install must be done from a git repository (or from PyPI) to get version information.
 
 Quick start
 -----------
