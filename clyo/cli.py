@@ -2,6 +2,8 @@
 
 
 from threading import Event
+import random
+import os
 
 
 # TODO -- use match statement with python >= 3.10 instead of if/else?
@@ -185,7 +187,7 @@ class CommandLineInterface:
         return self._value
 
     def _print_properties(self, ppty_cmd):
-        """Prints current values of properties of all objects"""
+        """Print current values of properties of all objects"""
         ppty = self.property_commands[ppty_cmd]
         ppty_repr = self.properties[ppty]['repr']
 
@@ -204,6 +206,48 @@ class CommandLineInterface:
 
         print('\n'.join(msgs))
 
+    def _print_help(self):
+        """Print help on objects, controlled properties and commands."""
+
+        nmax, _ = os.get_terminal_size()
+
+        print("OBJECTS ".ljust(nmax, '='))
+
+        for name, obj in self.objects.items():
+            print(f'--- {name} [{obj}]')
+            cont_props = obj.controlled_properties
+            cont_reprs = [self.properties[ppty]['repr'] for ppty in cont_props]
+            for cont_repr in cont_reprs:
+                print(f'{" " * 8}{cont_repr}')
+
+        print("COMMANDS ".ljust(nmax, '='))
+
+        print('--- Properties')
+        for ppty, ppty_data in self.properties.items():
+            ppty_repr = ppty_data['repr']
+            ppty_cmds = ppty_data['commands']
+            print(f'{" " * 8}{", ".join(ppty_cmds)} -- {ppty_repr} [{ppty}]')
+
+        print('--- Events')
+        for event_name, event_data in self.events.items():
+            print(f'{" " * 8}{", ".join(event_data["commands"])} -- {event_name}')
+
+        print('--- Exit')
+        print(f'{" " * 8}{", ".join(self.stop_commands)}')
+
+        print("EXAMPLE ".ljust(nmax, '='))
+
+        name = random.choice(list(self.objects))
+        ppty = random.choice(list(self.objects[name].controlled_properties))
+
+        ppty_repr = self.properties[ppty]['repr']
+        ppty_cmd = random.choice(self.properties[ppty]['commands'])
+
+        print(f'{ppty_cmd}-{name} xx -- change {ppty_repr} to xx for {name} only')
+        print(f'{ppty_cmd} xx -- change {ppty_repr} to xx for all relevant objects')
+
+        print('=' * nmax)
+
     # ------------------------------------------------------------------------
     # ========================= MAIN INTERACTIVE CLI =========================
     # ------------------------------------------------------------------------
@@ -213,12 +257,16 @@ class CommandLineInterface:
 
         while not self.stop_event.is_set():
 
-            quit_commands_str = ' or '.join(self.stop_commands)
-            command = input(f'Type command (to stop, type {quit_commands_str}): ')
+            command = input(f'Type command (help: ?): ')
+
+            # Print help -----------------------------------------------------
+
+            if command == '?':
+                self._print_help()
 
             # Stop all recordings --------------------------------------------
 
-            if command in self.stop_commands:
+            elif command in self.stop_commands:
                 for obj in self.objects.values():
                     try:
                         obj.on_stop()
