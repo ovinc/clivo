@@ -1,1 +1,2 @@
 include *.ipynb
+include LICENSE
