@@ -1,15 +1,14 @@
 About
 =====
 
-Command line interface to change properties of objects with user inputs.
+Command line interface to change properties of objects and trigger events with user inputs.
 
 Install
 -------
 
 ```bash
-git clone https://cameleon.univ-lyon1.fr/ovincent/clyo
-cd clyo
-pip install -e .
+git clone https://github.com/ovinc/clyo
+pip install -e clyo
 ```
 
 Install must be done from a git repository (or from PyPI) to get version information.
@@ -45,3 +44,8 @@ Author
 Olivier Vincent
 
 (ovinc.py@gmail.com)
+
+License
+-------
+
+3-Clause BSD (see *LICENSE* file).
