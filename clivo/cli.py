@@ -235,18 +235,21 @@ class CommandLineInterface:
         print('--- Exit')
         print(f'{" " * 8}{", ".join(self.stop_commands)}')
 
-        print("EXAMPLE ".ljust(nmax, '='))
+        try:
+            name = random.choice(list(self.objects))
+            ppty = random.choice(list(self.objects[name].controlled_properties))
+        except IndexError:
+            pass
+        else:
+            print("EXAMPLE ".ljust(nmax, '='))
 
-        name = random.choice(list(self.objects))
-        ppty = random.choice(list(self.objects[name].controlled_properties))
+            ppty_repr = self.properties[ppty]['repr']
+            ppty_cmd = random.choice(self.properties[ppty]['commands'])
 
-        ppty_repr = self.properties[ppty]['repr']
-        ppty_cmd = random.choice(self.properties[ppty]['commands'])
+            print(f'{ppty_cmd}-{name} xx -- change {ppty_repr} to xx for {name} only')
+            print(f'{ppty_cmd} xx -- change {ppty_repr} to xx for all relevant objects')
 
-        print(f'{ppty_cmd}-{name} xx -- change {ppty_repr} to xx for {name} only')
-        print(f'{ppty_cmd} xx -- change {ppty_repr} to xx for all relevant objects')
-
-        print('=' * nmax)
+            print('=' * nmax)
 
     # ------------------------------------------------------------------------
     # ========================= MAIN INTERACTIVE CLI =========================
