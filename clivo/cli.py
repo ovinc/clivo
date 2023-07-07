@@ -209,7 +209,10 @@ class CommandLineInterface:
     def _print_help(self):
         """Print help on objects, controlled properties and commands."""
 
-        nmax, _ = os.get_terminal_size()
+        try:
+            nmax, _ = os.get_terminal_size()
+        except OSError:  # happens in some cases (e.g. simulated terminals)
+            nmax = 80
 
         print("OBJECTS ".ljust(nmax, '='))
 
