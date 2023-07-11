@@ -9,6 +9,58 @@ import os
 # TODO -- use match statement with python >= 3.10 instead of if/else?
 
 
+class ControlledProperty:
+    """Class to manage object properties controlled by the CLI."""
+
+    def __init__(self, attribute, readable, commands):
+        """Init ControlledProperty object
+
+        Parameters
+        ----------
+
+        - attribute: name of the (settable) object attribute to control
+                    (can be sub-attributes, e.g. a property of an attribute)
+        - readable: human-readable name for the property (for repr purposes)
+        - commands: iterable of command names (str) that will trigger
+                    modification of the property when typed in the CLI
+
+        Example
+        -------
+        interval = ControlledProperty(attribute='timer.interval'
+                                      readable='Δt (s)',
+                                      commands= ('dt',))
+        """
+        self.attribute = attribute
+        self.readable = readable
+        self.commands = commands
+
+
+class ControlledEvent:
+    """Class to manage events controlled by the CLI."""
+
+    def __init__(self, event, readable, commands):
+        """Init ControlledProperty object
+
+        Parameters
+        ----------
+
+        - event: Event object to control (typically, from threading)
+        - readable: human-readable name for the property (for repr purposes)
+        - commands: iterable of command names (str) that will trigger
+                    modification of the property when typed in the CLI
+
+        Example
+        -------
+        stop = ControlledEvent(event=stop_event,
+                               readable='stop',
+                               commands=('q', 'quit'))
+        """
+        self.event = event
+        self.readable = readable
+        self.commands = commands
+
+
+
 # ================================ MAIN CLASS ================================
 
 
@@ -20,12 +72,11 @@ class CommandLineInterface:
 
     The CLI can control an arbitrary number of properties for every object
     (for example time interval, averaging number, etc.). These properties
-    have commands associated with them.
-    Below, we call can arbitrary property command y, e.g. y=dt for time interval.
+    have commands associated with them. Below, we call can arbitrary property
+    command y, e.g. y=dt for time interval.
 
     It is also possible to trigger events (e.g. request a graph) with some
-    pre-defined commands passed as a dict to the CLI class.
-    Below, we call these commands for event z
+    pre-defined commands. Below, we call these commands for event z.
 
     Once the CLI is started (self.run()), the user input options are:
     - y: inquire current settings (e.g. dt)
@@ -49,49 +100,18 @@ class CommandLineInterface:
                    of str that must belong to the keys of the `properties`
                    dict (see below).
 
-        - properties: dict of dict describing the properties of the objects
-                      that the CLI controls.
-                      - The keys are the names of the properties
-                        (can be sub-properties, e.g. a property of an attribute)
-                      - The values are dicts which must contain the entries
-                          - 'repr' (human-readable description for printing)
-                          - 'commands': iterable of command names (str) that
-                                        will trigger modification of the
-                                        property when typed in the CLI
+        - properties: iterable of all properties to control
+                      (of type ControlledProperty or subclasses)
 
-                      Example:
-                      {'timer.interval': {'repr': 'Δt (s)',
-                                          'commands': ('dt',),
-                                          },
-                       'averaging': {'repr': 'Averaging',
-                                     'commands': ('avg',),
-                                     }
-                       }
+        - events: iterable of events to control
+                  (of type ControlledEvent or subclass)
 
-        - events: dict of dict describing the events that the CLI controls.
-                  The keys are a description (human-readable) of the event,
-                  and the values are dicts which must contain the entries:
-                  - 'event': Event object to control (typically, from threading)
-                  - 'commands': iterable of command names (str) that
-                                will trigger modification of the
-                                property when typed in the CLI
-
-                  Example:
-                  {'graph': {'event': graph_event,
-                             'commands': ('g', 'graph')
-                             },
-                   'stop': {'event': stop_event,
-                            'commands': ('q', 'quit')
-                            }
-                   }
-
-                   Note: the 'stop' event, if provided, gets linked to the
-                   event that triggers exiting of the CLI. If not provided,
-                   the 'stop' event is defined internally
+                  Note: the 'stop' event, if provided, gets linked to the
+                  event that triggers exiting of the CLI. If not provided,
+                  the 'stop' event is defined internally
         """
         self.objects = objects
-        self.properties = properties
-        self.events = events
+        self.properties, self.events = self._create_ppty_and_event_dicts(properties, events)
 
         try:
             self.stop_dict = self.events.pop('stop')
@@ -112,6 +132,20 @@ class CommandLineInterface:
 
         # For CLI printing
         self.max_name_length = max([len(obj) for obj in self.objects])
+
+    def _create_ppty_and_event_dicts(self, properties, events):
+        """Move from ControlledProperty and ControlledEvent classes to dicts.
+
+        I do this because for now it's too much work to redesign all the
+        code around these new classes.
+        """
+        ppty_dict = {ppty.attribute: {'repr': ppty.readable,
+                                      'commands': ppty.commands}
+                     for ppty in properties}
+        event_dict = {event.readable: {'event': event.event,
+                                       'commands': event.commands}
+                      for event in events}
+        return ppty_dict, event_dict
 
     def _get_controlled_properties(self, objects):
         """Generate dict {ppty: [object names that have this ppty controlled]}."""
