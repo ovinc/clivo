@@ -18,7 +18,7 @@ Quick start
 
 ```python
 from clivo import CommandLineInterface
-cli = CommandLineInterface(objects, properties, events)
+cli = CommandLineInterface(objects, events)
 ```
 
 See `Example.ipynb` and docstrings of `CommandLineInterface` on how to use.

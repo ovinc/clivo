@@ -34,6 +34,11 @@ class ControlledProperty:
         self.readable = readable
         self.commands = commands
 
+    def __repr__(self):
+        msg = f'{self.__class__.__name__} ({self.readable}) '
+        msg += f'[attribute: {self.attribute}] [commands: {self.commands}]'
+        return msg
+
 
 class ControlledEvent:
     """Class to manage events controlled by the CLI."""
@@ -59,6 +64,10 @@ class ControlledEvent:
         self.readable = readable
         self.commands = commands
 
+    def __repr__(self):
+        msg = f'{self.__class__.__name__} ({self.readable}) '
+        msg += f'[event: {self.event}] [commands: {self.commands}]'
+        return msg
 
 
 # ================================ MAIN CLASS ================================
@@ -85,7 +94,7 @@ class CommandLineInterface:
     - z: trigger event (stop event is by default 'Q', 'q' or 'quit', can be changed)
     """
 
-    def __init__(self, objects, properties, events):
+    def __init__(self, objects, events):
         """Create interactive command line interface.
 
         Parameters
@@ -96,12 +105,8 @@ class CommandLineInterface:
                    specific things to do when the stop event is set.
                    objects must define a `controlled_properties` attribute
                    that lists which ones of its settable properties is
-                   controlled by the CLI. `controlled_properties` is an iterable
-                   of str that must belong to the keys of the `properties`
-                   dict (see below).
-
-        - properties: iterable of all properties to control
-                      (of type ControlledProperty or subclasses)
+                   controlled by the CLI. `controlled_properties` is an
+                   iterable of ControlledProperty objects.
 
         - events: iterable of events to control
                   (of type ControlledEvent or subclass)
@@ -111,6 +116,7 @@ class CommandLineInterface:
                   the 'stop' event is defined internally
         """
         self.objects = objects
+        properties = self._get_object_properties()
         self.properties, self.events = self._create_ppty_and_event_dicts(properties, events)
 
         try:
@@ -133,6 +139,12 @@ class CommandLineInterface:
         # For CLI printing
         self.max_name_length = max([len(obj) for obj in self.objects])
 
+    def _get_object_properties(self):
+        all_properties = set()
+        for obj in self.objects.values():
+            all_properties.update(obj.controlled_properties)
+        return tuple(all_properties)
+
     def _create_ppty_and_event_dicts(self, properties, events):
         """Move from ControlledProperty and ControlledEvent classes to dicts.
 
@@ -153,7 +165,8 @@ class CommandLineInterface:
         for ppty in self.properties:
             object_properties[ppty] = []
             for object_name, obj in objects.items():
-                if ppty in obj.controlled_properties:
+                ctrl_ppties = [ppty.attribute for ppty in obj.controlled_properties]
+                if ppty in ctrl_ppties:
                     object_properties[ppty].append(object_name)
         return object_properties
 
@@ -184,12 +197,9 @@ class CommandLineInterface:
                 commands[command_name] = name
         return commands
 
-    def _set_property_base(self, ppty_cmd, object_name, value, objects):
-        """Base method for _set_property().
-
-        For use in other modules that potentially define other objects.
-        """
-        obj = objects[object_name]
+    def _set_property(self, ppty_cmd, object_name, value):
+        """Manage command from CLI to set a property accordingly."""
+        obj = self.objects[object_name]
         ppty = self.property_commands[ppty_cmd]
 
         if object_name not in self.object_properties[ppty]:
@@ -202,10 +212,6 @@ class CommandLineInterface:
             print(f"'{value}' not a valid {ppty_repr} ({ppty})")
         else:
             print(f'New {ppty_repr} for {object_name}: {value}')
-
-    def _set_property(self, ppty_cmd, object_name, value):
-        """Manage command from CLI to set a property accordingly."""
-        return self._set_property_base(ppty_cmd, object_name, value, self.objects)
 
     def _get_property(self, ppty_cmd, object_name):
         """Get property according to given property command from CLI."""
@@ -252,7 +258,7 @@ class CommandLineInterface:
 
         for name, obj in self.objects.items():
             print(f'--- {name} [{obj}]')
-            cont_props = obj.controlled_properties
+            cont_props = [ppty.attribute for ppty in obj.controlled_properties]
             cont_reprs = [self.properties[ppty]['repr'] for ppty in cont_props]
             for cont_repr in cont_reprs:
                 print(f'{" " * 8}{cont_repr}')
@@ -280,8 +286,8 @@ class CommandLineInterface:
         else:
             print("EXAMPLE ".ljust(nmax, '='))
 
-            ppty_repr = self.properties[ppty]['repr']
-            ppty_cmd = random.choice(self.properties[ppty]['commands'])
+            ppty_repr = ppty.readable
+            ppty_cmd = random.choice(ppty.commands)
 
             print(f'{ppty_cmd}-{name} xx -- change {ppty_repr} to xx for {name} only')
             print(f'{ppty_cmd} xx -- change {ppty_repr} to xx for all relevant objects')
